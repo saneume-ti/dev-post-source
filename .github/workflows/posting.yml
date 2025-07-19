@@ -1,5 +1,6 @@
 name: Post to Repository A
 
+# The 'on' block and its children must be indented correctly
 on:
   push:
     paths:
@@ -10,10 +11,12 @@ jobs:
   post-to-A:
     runs-on: ubuntu-latest
     env:
-      TARGET_REPO: saneume-ti/dev-post-target  # ★ A のリポジトリ
+      TARGET_REPO: saneume-ti/dev-post-target # ★ A のリポジトリ
+      # The GH_TOKEN is used by the 'git clone' and 'gh pr create' commands
       GH_TOKEN: ${{ secrets.GH_TOKEN_FOR_A }}
 
     steps:
+      # Each step under 'steps:' is a list item, denoted by a hyphen '-'
       - name: Checkout B repository
         uses: actions/checkout@v4
 
@@ -25,6 +28,8 @@ jobs:
 
       - name: Install GitHub CLI
         uses: cli/cli-action@v2
+        # No 'with' block is needed here because the GH_TOKEN is already set
+        # in the job's environment variables, and the CLI will use it automatically.
 
       - name: Clone A repository
         run: |
@@ -44,8 +49,11 @@ jobs:
               continue
             fi
 
+            # Using a temporary file is a safe way to edit files in place
             awk -v insert="$src_content" '
               BEGIN {f=0}
+              # Recommendation: remove the space in your markdown markers for consistency
+              # e.g., change [] (posting-begin) to [](posting-begin)
               /^\[\]\(posting-begin\)/ {
                 print
                 print insert
@@ -68,15 +76,19 @@ jobs:
           cd a-repo
           git checkout -b auto/posting-update
           git add .
+          # This command commits only if there are staged changes
           git diff --cached --quiet || git commit -m "Auto-update from B repo"
-          git push origin auto/posting-update || echo "No changes to push"
+          git push -u origin auto/posting-update --force
 
       - name: Create Pull Request
         run: |
           cd a-repo
-          if git diff --quiet origin/main...HEAD; then
-            echo "No diff from main. Skipping PR."
+          # Check if a PR with the same head branch already exists
+          existing_pr=$(gh pr list --head auto/posting-update --json number --jq '.[0].number')
+          if [[ -n "$existing_pr" ]]; then
+            echo "A PR from auto/posting-update already exists. (#${existing_pr})"
           else
+            # Create a new PR
             gh pr create \
               --repo ${TARGET_REPO} \
               --title "Auto update from B repo" \
