@@ -26,8 +26,8 @@ jobs:
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
 
-      - name: Install GitHub CLI
-        uses: cli/cli-action@v2
+#      - name: Install GitHub CLI
+#        uses: cli/cli-action@v2
         # No 'with' block is needed here because the GH_TOKEN is already set
         # in the job's environment variables, and the CLI will use it automatically.
 
