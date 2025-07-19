@@ -1,0 +1,10 @@
+[
+  {
+    "source": "terms.md",
+    "target": "contents/term.md"
+  },
+  {
+    "source": "rules/srv1.md",
+    "target": "rules/index.md"
+  }
+]
