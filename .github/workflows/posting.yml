@@ -1,0 +1,86 @@
+name: Post to Repository A
+
+on:
+  push:
+    paths:
+      - '**.md'
+      - 'postmap.json'
+
+jobs:
+  post-to-A:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_REPO: saneume-ti/dev-post-target  # ★ A のリポジトリ
+      GH_TOKEN: ${{ secrets.GH_TOKEN_FOR_A }}
+
+    steps:
+      - name: Checkout B repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+
+      - name: Install GitHub CLI
+        uses: cli/cli-action@v2
+
+      - name: Clone A repository
+        run: |
+          git clone https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git a-repo
+
+      - name: Inject content to A repository based on postmap.json
+        run: |
+          mapfile -t entries < <(jq -c '.[]' postmap.json)
+          for entry in "${entries[@]}"; do
+            src=$(echo "$entry" | jq -r '.source')
+            dst=$(echo "$entry" | jq -r '.target')
+            src_content=$(cat "$src")
+
+            dst_path="a-repo/$dst"
+            if [[ ! -f "$dst_path" ]]; then
+              echo "Warning: Target file $dst_path not found"
+              continue
+            fi
+
+            awk -v insert="$src_content" '
+              BEGIN {f=0}
+              /^\[\]\(posting-begin\)/ {
+                print
+                print insert
+                f=1
+                next
+              }
+              /^\[\]\(posting-end\)/ {
+                f=0
+                print
+                next
+              }
+              !f {print}
+            ' "$dst_path" > "$dst_path.tmp" && mv "$dst_path.tmp" "$dst_path"
+
+            echo "Updated $dst_path"
+          done
+
+      - name: Commit and push changes
+        run: |
+          cd a-repo
+          git checkout -b auto/posting-update
+          git add .
+          git diff --cached --quiet || git commit -m "Auto-update from B repo"
+          git push origin auto/posting-update || echo "No changes to push"
+
+      - name: Create Pull Request
+        run: |
+          cd a-repo
+          if git diff --quiet origin/main...HEAD; then
+            echo "No diff from main. Skipping PR."
+          else
+            gh pr create \
+              --repo ${TARGET_REPO} \
+              --title "Auto update from B repo" \
+              --body "This PR contains automated content update from B" \
+              --head auto/posting-update \
+              --base main
+          fi
